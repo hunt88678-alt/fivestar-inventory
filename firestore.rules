@@ -1,41 +1,42 @@
 rules_version = '2';
 
 service cloud.firestore {
-match /databases/{database}/documents {
+  match /databases/{database}/documents {
 
-function signedIn() {
-return request.auth != null;
-}
+    function signedIn() {
+      return request.auth != null;
+    }
 
-function myRole() {
-return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
-}
+    function myRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
 
-function isAdmin() {
-return signedIn() && myRole() == 'admin';
-}
+    function isAdmin() {
+      return signedIn() && myRole() == 'admin';
+    }
 
-function isUserOrAdmin() {
-return signedIn() && (myRole() == 'user' || myRole() == 'admin');
-}
+    function isUserOrAdmin() {
+      return signedIn() && (myRole() == 'user' || myRole() == 'admin');
+    }
 
-match /users/{userId} {
-allow create: if signedIn()
-&& request.auth.uid == userId
-&& request.resource.data.role == 'guest';
+    // Each person can read/create their own profile.
+    // Only admin can change roles later.
+    match /users/{userId} {
+      allow create: if signedIn() && request.auth.uid == userId;
+      allow read: if signedIn() && (request.auth.uid == userId || isAdmin());
+      allow update, delete: if isAdmin();
+    }
 
-allow read: if signedIn() && (request.auth.uid == userId || isAdmin());
+    // Your app currently stores inventory in /inventory/brands and /inventory/meta.
+    // Logged-in users can view/update stock. Admin controls are hidden in the UI.
+    match /inventory/{docId} {
+      allow read: if isUserOrAdmin();
+      allow write: if isUserOrAdmin();
+    }
 
-allow update, delete: if isAdmin();
-}
-
-match /inventory/{docId} {
-allow read: if signedIn();
-allow write: if isUserOrAdmin();
-}
-
-match /{document=**} {
-allow read, write: if false;
-}
-}
+    // Everything else blocked.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
 }
